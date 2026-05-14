@@ -12,6 +12,7 @@ Phase 1 implementation of the core platform foundation:
 ## Frozen v1 operating flow
 
 - Canonical v1 operating flow documentation: `V1_OPERATING_FLOW.md`
+- UI/UX excellence standards for phase 2: `UI_UX_EXCELLENCE_SPEC.md`
 
 ## Quick start
 

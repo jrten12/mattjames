@@ -14,160 +14,303 @@ async def client_portal_shell() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Matt James Client Portal</title>
   <style>
-    body{font-family:Arial,sans-serif;margin:0;background:#0f1720;color:#e8edf5}
-    .wrap{max-width:1100px;margin:0 auto;padding:24px}
-    .card{background:#1b2633;border:1px solid #2c3e50;border-radius:10px;padding:16px;margin-top:16px}
+    :root{
+      --bg:#081123;
+      --bg-soft:#0d1b33;
+      --panel:#101d35;
+      --panel-2:#132443;
+      --text:#ecf2ff;
+      --muted:#9bb0d6;
+      --line:#263d66;
+      --accent:#4f8cff;
+      --accent-2:#7c5dff;
+      --ok:#5ad4a8;
+      --warn:#ffc266;
+      --error:#ff8a8a;
+    }
+    *{box-sizing:border-box}
+    body{
+      font-family:Inter,Segoe UI,Arial,sans-serif;
+      margin:0;
+      color:var(--text);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(79,140,255,.28), transparent 38%),
+        radial-gradient(circle at 80% -10%, rgba(124,93,255,.22), transparent 35%),
+        var(--bg);
+    }
+    .wrap{max-width:1160px;margin:0 auto;padding:28px 20px 40px}
+    .hero{
+      display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;
+      margin-bottom:14px
+    }
+    .title{margin:0;font-size:30px;letter-spacing:.2px}
+    .subtitle{margin:6px 0 0;color:var(--muted)}
+    .pill{
+      border:1px solid var(--line);
+      background:rgba(16,29,53,.75);
+      color:var(--muted);
+      border-radius:999px;
+      padding:8px 12px;
+      font-size:12px;
+    }
+    .grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+    .card{
+      background:linear-gradient(180deg,rgba(19,36,67,.9),rgba(16,29,53,.96));
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:16px;
+      box-shadow:0 10px 30px rgba(0,0,0,.22);
+    }
+    .card h3{margin:0 0 10px 0;font-size:18px}
+    .card h4{margin:0 0 8px 0;font-size:14px;color:#d7e3ff}
+    .muted{color:var(--muted)}
+    .small{font-size:12px}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .steps{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px 0}
-    .step{padding:6px 10px;border-radius:999px;background:#243447;color:#a7b8cb;border:1px solid #38516a}
-    .step.active{background:#2b7fff;color:#fff;border-color:#2b7fff}
-    button{background:#2b7fff;color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer}
-    button.secondary{background:#2c3e50}
-    input,select,textarea{width:100%;padding:8px;border-radius:6px;border:1px solid #4a5d71;background:#111a24;color:#eef4fb}
+    .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:5px}
+    input,select,textarea{
+      width:100%;
+      border-radius:10px;
+      border:1px solid #36517f;
+      background:#0b162a;
+      color:var(--text);
+      padding:10px 11px;
+      outline:none;
+    }
+    input:focus,select:focus,textarea:focus{border-color:var(--accent)}
     textarea{min-height:110px;resize:vertical}
-    label{font-size:12px;color:#a7b8cb}
+    button{
+      border:none;
+      border-radius:10px;
+      padding:10px 14px;
+      cursor:pointer;
+      color:white;
+      background:linear-gradient(90deg,var(--accent),var(--accent-2));
+      font-weight:600;
+    }
+    button.secondary{background:#243d68;color:#d3e2ff}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .list{margin:0;padding-left:18px;color:var(--muted)}
+    .list li{margin:4px 0}
+    .steps{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:8px 0 14px}
+    .step{
+      padding:8px 10px;
+      border-radius:10px;
+      background:#10203c;
+      color:#9eb4dd;
+      border:1px solid #2f4a75;
+      font-size:12px;
+      text-align:center;
+      font-weight:600;
+    }
+    .step.active{background:#1e3f74;color:white;border-color:#5f91eb}
     .actions{display:flex;justify-content:space-between;margin-top:12px}
     .hidden{display:none}
-    .muted{color:#a7b8cb}
-    pre{background:#0d141d;border:1px solid #243344;border-radius:8px;padding:12px;overflow:auto}
+    pre{
+      background:#091427;
+      border:1px solid #2a446f;
+      border-radius:10px;
+      padding:12px;
+      overflow:auto;
+      margin:0;
+      white-space:pre-wrap;
+    }
     table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border-bottom:1px solid #2c3e50;text-align:left;font-size:13px}
+    th,td{
+      padding:10px 8px;
+      border-bottom:1px solid #2d4670;
+      text-align:left;
+      font-size:13px;
+      vertical-align:top;
+    }
+    th{color:#bad0f5;font-size:12px;letter-spacing:.2px}
+    .status{
+      display:inline-block;
+      font-size:11px;
+      border:1px solid #3a5f94;
+      color:#bdd2f5;
+      border-radius:999px;
+      padding:4px 8px;
+      text-transform:capitalize;
+    }
+    .quick{display:flex;gap:8px;flex-wrap:wrap}
+    .quick .item{
+      flex:1 1 170px;
+      background:#0c1a31;
+      border:1px solid #2b446e;
+      border-radius:10px;
+      padding:10px;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    .link{color:#a9c8ff;text-decoration:none}
+    .alert{margin:0 0 12px 0;padding:10px;border-radius:10px;border:1px solid #345486;background:#10233f;color:#c2d8ff}
+    @media (max-width:960px){
+      .grid{grid-template-columns:1fr}
+      .steps{grid-template-columns:repeat(3,minmax(0,1fr))}
+      .row,.row-3{grid-template-columns:1fr}
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Client Portal</h1>
-    <p class="muted">Submit a request, review previews, and give approval decisions in plain language.</p>
-    <div class="card">
-      <h3>How to use this page</h3>
-      <ol class="muted" style="margin-top:6px">
+    <div class="hero">
+      <div>
+        <h1 class="title">Client Portal</h1>
+        <p class="subtitle">Simple request intake, preview review, and approval in one clean workspace.</p>
+      </div>
+      <div class="pill">Designed for non-technical users</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>How this works</h3>
+        <ol class="list small">
         <li>Fill in Base URL, API Key, and Organization ID.</li>
-        <li>Use the New Request wizard and submit.</li>
-        <li>Open My Requests to track status updates.</li>
-        <li>When a preview is ready, open Preview Review and submit your decision.</li>
+        <li>Use the guided request wizard (left panel).</li>
+        <li>Track live status in My Requests.</li>
+        <li>Open preview and submit decision when ready.</li>
       </ol>
-    </div>
-
-    <div class="card">
-      <h3>Connection</h3>
-      <div class="row">
-        <div><label>Base URL</label><input id="base_url" value="http://127.0.0.1:8000"/></div>
-        <div><label>API Key</label><input id="api_key" placeholder="Paste your API key from setup"/></div>
-        <div><label>Organization ID</label><input id="organization_id" placeholder="org uuid"/></div>
-        <div><label>Project ID (optional)</label><input id="project_id" placeholder="project uuid"/></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>New Request</h3>
-      <div class="steps">
-        <div id="indicator-0" class="step active">1. Type</div>
-        <div id="indicator-1" class="step">2. Goal</div>
-        <div id="indicator-2" class="step">3. Features</div>
-        <div id="indicator-3" class="step">4. Assets</div>
-        <div id="indicator-4" class="step">5. Success</div>
-        <div id="indicator-5" class="step">6. Submit</div>
-      </div>
-
-      <div id="step-0">
-        <label>Request Type</label>
-        <select id="request_type">
-          <option value="new_app">New app</option>
-          <option value="update">Update</option>
-          <option value="bugfix">Bugfix</option>
-          <option value="enhancement">Enhancement</option>
-        </select>
-        <label style="margin-top:8px;display:block">Request Title</label>
-        <input id="title" placeholder="Example: Intake wizard and review flow"/>
-      </div>
-
-      <div id="step-1" class="hidden">
-        <label>Business Goal</label>
-        <textarea id="goal" placeholder="What outcome do you want from this request?"></textarea>
-      </div>
-
-      <div id="step-2" class="hidden">
-        <label>Required Features</label>
-        <textarea id="features" placeholder="List required features in plain language."></textarea>
-      </div>
-
-      <div id="step-3" class="hidden">
-        <label>Assets and References</label>
-        <textarea id="assets" placeholder="Links, docs, screenshots, process notes."></textarea>
-      </div>
-
-      <div id="step-4" class="hidden">
-        <label>Success Criteria</label>
-        <textarea id="success" placeholder="How should we measure success?"></textarea>
-      </div>
-
-      <div id="step-5" class="hidden">
-        <p class="muted">Review before submission.</p>
-        <pre id="review"></pre>
-      </div>
-
-      <div class="actions">
-        <button id="backBtn" class="secondary">Back</button>
-        <button id="nextBtn">Next Step</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Result</h3>
-      <pre id="result">{ "status": "idle" }</pre>
-    </div>
-
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3 style="margin:0">My Requests</h3>
-        <button id="refreshBtn" class="secondary">Refresh</button>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Updated</th>
-          </tr>
-        </thead>
-        <tbody id="requestsBody">
-          <tr><td colspan="4" class="muted">No requests yet.</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <h3>Preview Review</h3>
-      <div class="row">
-        <div>
-          <label>Select Request</label>
-          <select id="preview_request_select">
-            <option value="">Select a request...</option>
-          </select>
-        </div>
-        <div>
-          <label>Decision</label>
-          <select id="preview_decision">
-            <option value="approve">Approve</option>
-            <option value="request_changes">Request Changes</option>
-            <option value="reject">Reject</option>
-          </select>
+        <div class="quick" style="margin-top:12px">
+          <div class="item"><strong>Default flow</strong><br/>Submit request -> review preview -> approve or request changes.</div>
+          <div class="item"><strong>You should never need IDs</strong><br/>Pick requests from dropdowns once loaded.</div>
+          <div class="item"><strong>Safe actions</strong><br/>High-impact decisions ask for confirmation.</div>
         </div>
       </div>
-      <div style="margin-top:10px;display:flex;gap:8px">
-        <button id="loadPreviewBtn" class="secondary">Load Preview</button>
-        <a id="openPreviewLink" href="#" target="_blank" style="display:none;color:#9ecbff;padding-top:10px">Open Preview</a>
+
+      <div class="card">
+        <h3>Workspace setup</h3>
+        <div class="row">
+          <div><label>Base URL</label><input id="base_url" value="http://127.0.0.1:8000"/></div>
+          <div><label>API Key</label><input id="api_key" placeholder="Paste your API key from setup"/></div>
+          <div><label>Organization ID</label><input id="organization_id" placeholder="Organization UUID"/></div>
+          <div><label>Project ID (optional)</label><input id="project_id" placeholder="Project UUID (optional)"/></div>
+        </div>
       </div>
-      <div style="margin-top:10px">
-        <label>Feedback</label>
-        <textarea id="preview_feedback" placeholder="Share what works, what should change, and why."></textarea>
+
+      <div class="card">
+        <h3>New Request</h3>
+        <div class="alert small">The portal turns your answers into a clean API request automatically.</div>
+        <div class="steps">
+          <div id="indicator-0" class="step active">1. Type</div>
+          <div id="indicator-1" class="step">2. Goal</div>
+          <div id="indicator-2" class="step">3. Features</div>
+          <div id="indicator-3" class="step">4. Assets</div>
+          <div id="indicator-4" class="step">5. Success</div>
+          <div id="indicator-5" class="step">6. Submit</div>
+        </div>
+
+        <div id="step-0">
+          <div class="row">
+            <div>
+              <label>Request Type</label>
+              <select id="request_type">
+                <option value="new_app">New app</option>
+                <option value="update">Update</option>
+                <option value="bugfix">Bugfix</option>
+                <option value="enhancement">Enhancement</option>
+              </select>
+            </div>
+            <div>
+              <label>Request Title</label>
+              <input id="title" placeholder="Example: Improve onboarding flow"/>
+            </div>
+          </div>
+        </div>
+
+        <div id="step-1" class="hidden">
+          <label>Business Goal</label>
+          <textarea id="goal" placeholder="What outcome should this request achieve?"></textarea>
+        </div>
+
+        <div id="step-2" class="hidden">
+          <label>Required Features</label>
+          <textarea id="features" placeholder="List requested features in plain language."></textarea>
+        </div>
+
+        <div id="step-3" class="hidden">
+          <label>Assets and References</label>
+          <textarea id="assets" placeholder="Optional links, docs, examples, screenshots, or process notes."></textarea>
+        </div>
+
+        <div id="step-4" class="hidden">
+          <label>Success Criteria</label>
+          <textarea id="success" placeholder="How should success be measured?"></textarea>
+        </div>
+
+        <div id="step-5" class="hidden">
+          <p class="muted small">Review before submission:</p>
+          <pre id="review"></pre>
+        </div>
+
+        <div class="actions">
+          <button id="backBtn" class="secondary">Back</button>
+          <button id="nextBtn">Next Step</button>
+        </div>
       </div>
-      <div style="margin-top:10px">
-        <button id="submitDecisionBtn">Submit Decision</button>
+
+      <div class="card">
+        <h3>Result</h3>
+        <pre id="result">{ "status": "idle" }</pre>
       </div>
-      <p class="muted" style="margin-top:8px">Approve moves to approved. Request Changes and Reject are treated as high-impact decisions and ask for confirmation.</p>
-      <pre id="previewMeta" style="margin-top:10px">{ "status": "idle" }</pre>
+      </div>
+
+      <div style="display:grid;gap:14px">
+        <div class="card">
+          <div class="toolbar">
+            <h3 style="margin:0">My Requests</h3>
+            <button id="refreshBtn" class="secondary">Refresh</button>
+          </div>
+          <table style="margin-top:10px">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody id="requestsBody">
+              <tr><td colspan="4" class="muted">No requests yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3>Preview Review</h3>
+          <div class="row">
+            <div>
+              <label>Select Request</label>
+              <select id="preview_request_select">
+                <option value="">Select a request...</option>
+              </select>
+            </div>
+            <div>
+              <label>Decision</label>
+              <select id="preview_decision">
+                <option value="approve">Approve</option>
+                <option value="request_changes">Request Changes</option>
+                <option value="reject">Reject</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+            <button id="loadPreviewBtn" class="secondary">Load Preview</button>
+            <a id="openPreviewLink" href="#" target="_blank" class="link" style="display:none">Open Preview</a>
+          </div>
+          <div style="margin-top:10px">
+            <label>Feedback</label>
+            <textarea id="preview_feedback" placeholder="Share what works well and what should change."></textarea>
+          </div>
+          <div style="margin-top:10px">
+            <button id="submitDecisionBtn">Submit Decision</button>
+          </select>
+        </div>
+          <p class="muted small" style="margin:8px 0 0">Non-approve decisions ask for confirmation because they can delay release.</p>
+          <pre id="previewMeta" style="margin-top:10px">{ "status": "idle" }</pre>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -289,7 +432,7 @@ async def client_portal_shell() -> str:
           '<tr>' +
             '<td>' + item.title + '</td>' +
             '<td>' + item.request_type + '</td>' +
-            '<td>' + item.status + '</td>' +
+            '<td><span class="status">' + item.status.replaceAll('_', ' ') + '</span></td>' +
             '<td>' + item.updated_at + '</td>' +
           '</tr>'
         )).join('');
