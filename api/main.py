@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from api.config import get_settings
 from api.db import db_ping
@@ -70,9 +70,9 @@ app.include_router(client_portal_router, tags=["client_portal"])
 app.include_router(founder_console_router, tags=["founder_console"])
 
 
-@app.get("/admin")
-async def admin_shell() -> str:
-    return """
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_shell() -> HTMLResponse:
+    html = """
 <!doctype html>
 <html>
 <head>
@@ -220,6 +220,7 @@ async def admin_shell() -> str:
 </body>
 </html>
 """
+    return HTMLResponse(content=html)
 
 
 @app.exception_handler(RequestValidationError)
