@@ -37,13 +37,22 @@ async def client_portal_shell() -> str:
 <body>
   <div class="wrap">
     <h1>Client Portal</h1>
-    <p class="muted">Submit a new request, then track status in one place.</p>
+    <p class="muted">Submit a request, review previews, and give approval decisions in plain language.</p>
+    <div class="card">
+      <h3>How to use this page</h3>
+      <ol class="muted" style="margin-top:6px">
+        <li>Fill in Base URL, API Key, and Organization ID.</li>
+        <li>Use the New Request wizard and submit.</li>
+        <li>Open My Requests to track status updates.</li>
+        <li>When a preview is ready, open Preview Review and submit your decision.</li>
+      </ol>
+    </div>
 
     <div class="card">
       <h3>Connection</h3>
       <div class="row">
         <div><label>Base URL</label><input id="base_url" value="http://127.0.0.1:8000"/></div>
-        <div><label>API Key</label><input id="api_key" placeholder="paste PLATFORM_API_KEYS value"/></div>
+        <div><label>API Key</label><input id="api_key" placeholder="Paste your API key from setup"/></div>
         <div><label>Organization ID</label><input id="organization_id" placeholder="org uuid"/></div>
         <div><label>Project ID (optional)</label><input id="project_id" placeholder="project uuid"/></div>
       </div>
@@ -99,7 +108,7 @@ async def client_portal_shell() -> str:
 
       <div class="actions">
         <button id="backBtn" class="secondary">Back</button>
-        <button id="nextBtn">Next</button>
+        <button id="nextBtn">Next Step</button>
       </div>
     </div>
 
@@ -157,6 +166,7 @@ async def client_portal_shell() -> str:
       <div style="margin-top:10px">
         <button id="submitDecisionBtn">Submit Decision</button>
       </div>
+      <p class="muted" style="margin-top:8px">Approve moves to approved. Request Changes and Reject are treated as high-impact decisions and ask for confirmation.</p>
       <pre id="previewMeta" style="margin-top:10px">{ "status": "idle" }</pre>
     </div>
   </div>
@@ -213,6 +223,11 @@ async def client_portal_shell() -> str:
         return;
       }
       out.textContent = '{ "status": "working" }';
+      const confirmed = window.confirm('Submit this request now?');
+      if (!confirmed) {
+        out.textContent = JSON.stringify({status: 'cancelled', message: 'Submission cancelled by user.'}, null, 2);
+        return;
+      }
       try {
         const res = await fetch(base + '/v1/intake-requests', {
           method: 'POST',
@@ -348,6 +363,13 @@ async def client_portal_shell() -> str:
         return;
       }
       const nextStatus = decisionToStatus(decision);
+      if (decision !== 'approve') {
+        const confirmed = window.confirm('This decision may delay release progress. Continue?');
+        if (!confirmed) {
+          meta.textContent = JSON.stringify({status: 'cancelled', message: 'Decision cancelled by user.'}, null, 2);
+          return;
+        }
+      }
       try {
         const res = await fetch(base + '/v1/intake-requests/' + intakeRequestId + '/status', {
           method: 'POST',

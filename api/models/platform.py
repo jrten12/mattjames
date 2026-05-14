@@ -205,6 +205,119 @@ class ApprovalDecisionRecord(BaseModel):
     created_at: datetime
 
 
+class ReleaseStatus(str, Enum):
+    pending = "pending"
+    staged = "staged"
+    approved = "approved"
+    deployed = "deployed"
+    failed = "failed"
+    rolled_back = "rolled_back"
+
+
+class ReleaseCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    intake_request_id: UUID
+    preview_build_id: UUID
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class ReleaseStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: ReleaseStatus
+    release_url: str | None = Field(default=None, max_length=400)
+    rollback_reason: str | None = Field(default=None, max_length=1000)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class ReleaseRecord(BaseModel):
+    id: UUID
+    intake_request_id: UUID
+    preview_build_id: UUID
+    organization_id: UUID
+    project_id: UUID | None
+    build_version: str
+    status: ReleaseStatus
+    release_url: str | None
+    rollback_reason: str | None
+    notes: str | None
+    initiated_by: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ClientEnvironmentType(str, Enum):
+    preview = "preview"
+    staging = "staging"
+    production = "production"
+
+
+class ClientEnvironmentStatus(str, Enum):
+    provisioning = "provisioning"
+    active = "active"
+    paused = "paused"
+    failed = "failed"
+    retired = "retired"
+
+
+class ClientEnvironmentCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    app_id: UUID
+    name: str = Field(min_length=1, max_length=120)
+    environment_type: ClientEnvironmentType
+    base_url: str | None = Field(default=None, max_length=400)
+    region: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class ClientEnvironmentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: ClientEnvironmentStatus
+    base_url: str | None = Field(default=None, max_length=400)
+    region: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class ClientEnvironmentRecord(BaseModel):
+    id: UUID
+    app_id: UUID
+    organization_id: UUID
+    project_id: UUID
+    name: str
+    environment_type: ClientEnvironmentType
+    status: ClientEnvironmentStatus
+    base_url: str | None
+    region: str | None
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class OverageBehavior(str, Enum):
+    allow = "allow"
+    throttle = "throttle"
+    pause = "pause"
+
+
+class MeteringPolicyUpsert(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    base_fee_cents: int = Field(ge=0, le=10_000_000)
+    usage_cap: int = Field(ge=0, le=10_000_000_000)
+    overage_behavior: OverageBehavior
+    is_enforced: bool = True
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class MeteringPolicyRecord(BaseModel):
+    organization_id: UUID
+    base_fee_cents: int
+    usage_cap: int
+    overage_behavior: OverageBehavior
+    is_enforced: bool
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class TransitionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     to_state: ProjectState

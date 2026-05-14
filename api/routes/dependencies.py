@@ -24,3 +24,10 @@ def require_write_access(request: Request):
     if tenant_claims.role in allowed:
         return None
     return error_json(403, "tenant_forbidden", "Tenant role is not allowed to perform write operations.")
+
+
+def require_internal_access(request: Request):
+    tenant_claims = getattr(request.state, "tenant_claims", None)
+    if tenant_claims is None:
+        return None
+    return error_json(403, "founder_only", "This operation is restricted to founder/internal controls.")

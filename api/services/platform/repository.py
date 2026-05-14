@@ -13,12 +13,18 @@ from api.models.platform import (
     ApprovalDecisionRecord,
     App,
     AppCreate,
+    ClientEnvironmentCreate,
+    ClientEnvironmentRecord,
+    ClientEnvironmentStatus,
+    ClientEnvironmentUpdate,
     AppStatus,
     IdempotencyRecord,
     IntakeRequest,
     IntakeRequestCreate,
     IntakeRequestStatus,
     IntakeRequestTriageUpdate,
+    MeteringPolicyRecord,
+    MeteringPolicyUpsert,
     Organization,
     OrganizationCreate,
     OrganizationMember,
@@ -26,6 +32,10 @@ from api.models.platform import (
     Project,
     ProjectCreate,
     ProjectState,
+    ReleaseCreate,
+    ReleaseRecord,
+    ReleaseStatus,
+    ReleaseStatusUpdate,
     PreviewBuild,
     PreviewBuildCreate,
     PreviewBuildStatus,
@@ -179,6 +189,65 @@ class PlatformRepository(ABC):
     ) -> list[ApprovalDecisionRecord]: ...
 
     @abstractmethod
+    def create_release_record(
+        self,
+        body: ReleaseCreate,
+        *,
+        initiated_by: str | None,
+    ) -> ReleaseRecord: ...
+
+    @abstractmethod
+    def list_release_records(
+        self,
+        intake_request_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: ReleaseStatus | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
+    ) -> list[ReleaseRecord]: ...
+
+    @abstractmethod
+    def update_release_record_status(self, release_id: UUID, body: ReleaseStatusUpdate) -> ReleaseRecord: ...
+
+    @abstractmethod
+    def get_release_record(self, release_id: UUID) -> ReleaseRecord: ...
+
+    @abstractmethod
+    def create_client_environment(self, body: ClientEnvironmentCreate) -> ClientEnvironmentRecord: ...
+
+    @abstractmethod
+    def list_client_environments(
+        self,
+        app_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: ClientEnvironmentStatus | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
+    ) -> list[ClientEnvironmentRecord]: ...
+
+    @abstractmethod
+    def update_client_environment(
+        self,
+        environment_id: UUID,
+        body: ClientEnvironmentUpdate,
+    ) -> ClientEnvironmentRecord: ...
+
+    @abstractmethod
+    def get_client_environment(self, environment_id: UUID) -> ClientEnvironmentRecord: ...
+
+    @abstractmethod
+    def upsert_metering_policy(
+        self,
+        organization_id: UUID,
+        body: MeteringPolicyUpsert,
+    ) -> MeteringPolicyRecord: ...
+
+    @abstractmethod
+    def get_metering_policy(self, organization_id: UUID) -> MeteringPolicyRecord: ...
+
+    @abstractmethod
     def transition_project(
         self,
         project_id: UUID,
@@ -231,6 +300,9 @@ class InMemoryRepository(PlatformRepository):
         self.intake_requests: dict[UUID, IntakeRequest] = {}
         self.preview_builds: dict[UUID, PreviewBuild] = {}
         self.approval_decisions: dict[UUID, ApprovalDecisionRecord] = {}
+        self.releases: dict[UUID, ReleaseRecord] = {}
+        self.client_environments: dict[UUID, ClientEnvironmentRecord] = {}
+        self.metering_policies: dict[UUID, MeteringPolicyRecord] = {}
         self.events: list[WorkflowEvent] = []
         self.members: dict[UUID, OrganizationMember] = {}
         self.idempotency: dict[tuple[str, str], IdempotencyRecord] = {}
@@ -573,6 +645,191 @@ class InMemoryRepository(PlatformRepository):
             c_time, c_id = cursor
             items = [item for item in items if (item.created_at, item.id) < (c_time, c_id)]
         return items[offset : offset + limit]
+
+    def create_release_record(
+        self,
+        body: ReleaseCreate,
+        *,
+        initiated_by: str | None,
+    ) -> ReleaseRecord:
+        intake_request = self.get_intake_request(body.intake_request_id)
+        preview_build = self.get_preview_build(body.preview_build_id)
+        if preview_build.intake_request_id != body.intake_request_id:
+            raise ConflictError("Preview build does not belong to intake request.")
+        if preview_build.status != PreviewBuildStatus.ready:
+            raise ConflictError("Preview build is not ready for release.")
+        latest = self.list_approval_decisions(body.intake_request_id, limit=1)
+        if not latest or latest[0].decision.value != "approve":
+            raise ConflictError("Latest approval decision is not approve.")
+        now = _now()
+        release = ReleaseRecord(
+            id=uuid4(),
+            intake_request_id=body.intake_request_id,
+            preview_build_id=body.preview_build_id,
+            organization_id=intake_request.organization_id,
+            project_id=intake_request.project_id,
+            build_version=preview_build.build_version,
+            status=ReleaseStatus.pending,
+            release_url=None,
+            rollback_reason=None,
+            notes=body.notes,
+            initiated_by=initiated_by,
+            created_at=now,
+            updated_at=now,
+        )
+        self.releases[release.id] = release
+        return release
+
+    def list_release_records(
+        self,
+        intake_request_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: ReleaseStatus | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
+    ) -> list[ReleaseRecord]:
+        items = sorted(
+            (r for r in self.releases.values() if r.intake_request_id == intake_request_id),
+            key=lambda item: (item.created_at, item.id),
+            reverse=True,
+        )
+        if status is not None:
+            items = [item for item in items if item.status == status]
+        if cursor is not None:
+            c_time, c_id = cursor
+            items = [item for item in items if (item.created_at, item.id) < (c_time, c_id)]
+        return items[offset : offset + limit]
+
+    def update_release_record_status(self, release_id: UUID, body: ReleaseStatusUpdate) -> ReleaseRecord:
+        current = self.get_release_record(release_id)
+        updated = current.model_copy(
+            update={
+                "status": body.status,
+                "release_url": body.release_url if body.release_url is not None else current.release_url,
+                "rollback_reason": (
+                    body.rollback_reason if body.rollback_reason is not None else current.rollback_reason
+                ),
+                "notes": body.notes if body.notes is not None else current.notes,
+                "updated_at": _now(),
+            }
+        )
+        self.releases[release_id] = updated
+        if body.status == ReleaseStatus.deployed:
+            self.update_intake_request_status(current.intake_request_id, IntakeRequestStatus.deployed)
+        return updated
+
+    def get_release_record(self, release_id: UUID) -> ReleaseRecord:
+        release = self.releases.get(release_id)
+        if release is None:
+            raise NotFoundError("Release record not found.")
+        return release
+
+    def create_client_environment(self, body: ClientEnvironmentCreate) -> ClientEnvironmentRecord:
+        app = self.get_app(body.app_id)
+        project = self.get_project(app.project_id)
+        now = _now()
+        environment = ClientEnvironmentRecord(
+            id=uuid4(),
+            app_id=body.app_id,
+            organization_id=project.organization_id,
+            project_id=project.id,
+            name=body.name,
+            environment_type=body.environment_type,
+            status=ClientEnvironmentStatus.provisioning,
+            base_url=body.base_url,
+            region=body.region,
+            notes=body.notes,
+            created_at=now,
+            updated_at=now,
+        )
+        self.client_environments[environment.id] = environment
+        return environment
+
+    def list_client_environments(
+        self,
+        app_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: ClientEnvironmentStatus | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
+    ) -> list[ClientEnvironmentRecord]:
+        items = sorted(
+            (e for e in self.client_environments.values() if e.app_id == app_id),
+            key=lambda item: (item.created_at, item.id),
+            reverse=True,
+        )
+        if status is not None:
+            items = [item for item in items if item.status == status]
+        if cursor is not None:
+            c_time, c_id = cursor
+            items = [item for item in items if (item.created_at, item.id) < (c_time, c_id)]
+        return items[offset : offset + limit]
+
+    def update_client_environment(
+        self,
+        environment_id: UUID,
+        body: ClientEnvironmentUpdate,
+    ) -> ClientEnvironmentRecord:
+        current = self.get_client_environment(environment_id)
+        updated = current.model_copy(
+            update={
+                "status": body.status,
+                "base_url": body.base_url if body.base_url is not None else current.base_url,
+                "region": body.region if body.region is not None else current.region,
+                "notes": body.notes if body.notes is not None else current.notes,
+                "updated_at": _now(),
+            }
+        )
+        self.client_environments[environment_id] = updated
+        return updated
+
+    def get_client_environment(self, environment_id: UUID) -> ClientEnvironmentRecord:
+        env = self.client_environments.get(environment_id)
+        if env is None:
+            raise NotFoundError("Client environment not found.")
+        return env
+
+    def upsert_metering_policy(
+        self,
+        organization_id: UUID,
+        body: MeteringPolicyUpsert,
+    ) -> MeteringPolicyRecord:
+        self.get_organization(organization_id)
+        now = _now()
+        existing = self.metering_policies.get(organization_id)
+        if existing is None:
+            record = MeteringPolicyRecord(
+                organization_id=organization_id,
+                base_fee_cents=body.base_fee_cents,
+                usage_cap=body.usage_cap,
+                overage_behavior=body.overage_behavior,
+                is_enforced=body.is_enforced,
+                notes=body.notes,
+                created_at=now,
+                updated_at=now,
+            )
+        else:
+            record = existing.model_copy(
+                update={
+                    "base_fee_cents": body.base_fee_cents,
+                    "usage_cap": body.usage_cap,
+                    "overage_behavior": body.overage_behavior,
+                    "is_enforced": body.is_enforced,
+                    "notes": body.notes,
+                    "updated_at": now,
+                }
+            )
+        self.metering_policies[organization_id] = record
+        return record
+
+    def get_metering_policy(self, organization_id: UUID) -> MeteringPolicyRecord:
+        self.get_organization(organization_id)
+        record = self.metering_policies.get(organization_id)
+        if record is None:
+            raise NotFoundError("Metering policy not found.")
+        return record
 
     def get_project(self, project_id: UUID) -> Project:
         project = self.projects.get(project_id)
@@ -1340,6 +1597,323 @@ class PostgresRepository(PlatformRepository):
             params.extend([limit, offset])
             cur.execute(query, tuple(params))
             return [ApprovalDecisionRecord(**row) for row in cur.fetchall()]
+
+    def create_release_record(
+        self,
+        body: ReleaseCreate,
+        *,
+        initiated_by: str | None,
+    ) -> ReleaseRecord:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                select id, organization_id, project_id
+                from intake_requests
+                where id = %s
+                for update
+                """,
+                (body.intake_request_id,),
+            )
+            intake_row = cur.fetchone()
+            if intake_row is None:
+                raise NotFoundError("Intake request not found.")
+            cur.execute(
+                """
+                select id, intake_request_id, build_version, status
+                from preview_builds
+                where id = %s
+                """,
+                (body.preview_build_id,),
+            )
+            preview_row = cur.fetchone()
+            if preview_row is None:
+                raise NotFoundError("Preview build not found.")
+            if preview_row["intake_request_id"] != body.intake_request_id:
+                raise ConflictError("Preview build does not belong to intake request.")
+            if preview_row["status"] != PreviewBuildStatus.ready.value:
+                raise ConflictError("Preview build is not ready for release.")
+            cur.execute(
+                """
+                select decision
+                from approval_decisions
+                where intake_request_id = %s
+                order by created_at desc, id desc
+                limit 1
+                """,
+                (body.intake_request_id,),
+            )
+            approval_row = cur.fetchone()
+            if approval_row is None or approval_row["decision"] != "approve":
+                raise ConflictError("Latest approval decision is not approve.")
+            cur.execute(
+                """
+                insert into release_records(
+                    id, intake_request_id, preview_build_id, organization_id, project_id, build_version,
+                    status, release_url, rollback_reason, notes, initiated_by
+                ) values(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                returning id, intake_request_id, preview_build_id, organization_id, project_id, build_version,
+                          status, release_url, rollback_reason, notes, initiated_by, created_at, updated_at
+                """,
+                (
+                    uuid4(),
+                    body.intake_request_id,
+                    body.preview_build_id,
+                    intake_row["organization_id"],
+                    intake_row["project_id"],
+                    preview_row["build_version"],
+                    ReleaseStatus.pending.value,
+                    None,
+                    None,
+                    body.notes,
+                    initiated_by,
+                ),
+            )
+            row = cur.fetchone()
+            return ReleaseRecord(**row)
+
+    def list_release_records(
+        self,
+        intake_request_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: ReleaseStatus | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
+    ) -> list[ReleaseRecord]:
+        with get_db_cursor() as cur:
+            query = """
+                select id, intake_request_id, preview_build_id, organization_id, project_id, build_version,
+                       status, release_url, rollback_reason, notes, initiated_by, created_at, updated_at
+                from release_records
+                where intake_request_id = %s
+            """
+            params: list = [intake_request_id]
+            if status is not None:
+                query += " and status = %s"
+                params.append(status.value)
+            if cursor is not None:
+                c_time, c_id = cursor
+                query += " and (created_at, id) < (%s, %s)"
+                params.extend([c_time, c_id])
+            query += " order by created_at desc, id desc limit %s offset %s"
+            params.extend([limit, offset])
+            cur.execute(query, tuple(params))
+            return [ReleaseRecord(**row) for row in cur.fetchall()]
+
+    def update_release_record_status(self, release_id: UUID, body: ReleaseStatusUpdate) -> ReleaseRecord:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                update release_records
+                set status = %s,
+                    release_url = coalesce(%s, release_url),
+                    rollback_reason = coalesce(%s, rollback_reason),
+                    notes = coalesce(%s, notes),
+                    updated_at = now()
+                where id = %s
+                returning id, intake_request_id, preview_build_id, organization_id, project_id, build_version,
+                          status, release_url, rollback_reason, notes, initiated_by, created_at, updated_at
+                """,
+                (
+                    body.status.value,
+                    body.release_url,
+                    body.rollback_reason,
+                    body.notes,
+                    release_id,
+                ),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise NotFoundError("Release record not found.")
+            if body.status == ReleaseStatus.deployed:
+                cur.execute(
+                    """
+                    update intake_requests
+                    set status = %s, updated_at = now()
+                    where id = %s
+                    """,
+                    (IntakeRequestStatus.deployed.value, row["intake_request_id"]),
+                )
+            return ReleaseRecord(**row)
+
+    def get_release_record(self, release_id: UUID) -> ReleaseRecord:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                select id, intake_request_id, preview_build_id, organization_id, project_id, build_version,
+                       status, release_url, rollback_reason, notes, initiated_by, created_at, updated_at
+                from release_records
+                where id = %s
+                """,
+                (release_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise NotFoundError("Release record not found.")
+            return ReleaseRecord(**row)
+
+    def create_client_environment(self, body: ClientEnvironmentCreate) -> ClientEnvironmentRecord:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                select a.id as app_id, p.id as project_id, p.organization_id
+                from apps a
+                join projects p on p.id = a.project_id
+                where a.id = %s
+                """,
+                (body.app_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise NotFoundError("App not found.")
+            cur.execute(
+                """
+                insert into client_environments(
+                    id, app_id, organization_id, project_id, name, environment_type, status, base_url, region, notes
+                ) values(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                returning id, app_id, organization_id, project_id, name, environment_type, status, base_url, region, notes, created_at, updated_at
+                """,
+                (
+                    uuid4(),
+                    body.app_id,
+                    row["organization_id"],
+                    row["project_id"],
+                    body.name,
+                    body.environment_type.value,
+                    ClientEnvironmentStatus.provisioning.value,
+                    body.base_url,
+                    body.region,
+                    body.notes,
+                ),
+            )
+            created = cur.fetchone()
+            return ClientEnvironmentRecord(**created)
+
+    def list_client_environments(
+        self,
+        app_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: ClientEnvironmentStatus | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
+    ) -> list[ClientEnvironmentRecord]:
+        with get_db_cursor() as cur:
+            query = """
+                select id, app_id, organization_id, project_id, name, environment_type, status, base_url, region, notes, created_at, updated_at
+                from client_environments
+                where app_id = %s
+            """
+            params: list = [app_id]
+            if status is not None:
+                query += " and status = %s"
+                params.append(status.value)
+            if cursor is not None:
+                c_time, c_id = cursor
+                query += " and (created_at, id) < (%s, %s)"
+                params.extend([c_time, c_id])
+            query += " order by created_at desc, id desc limit %s offset %s"
+            params.extend([limit, offset])
+            cur.execute(query, tuple(params))
+            return [ClientEnvironmentRecord(**row) for row in cur.fetchall()]
+
+    def update_client_environment(
+        self,
+        environment_id: UUID,
+        body: ClientEnvironmentUpdate,
+    ) -> ClientEnvironmentRecord:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                update client_environments
+                set status = %s,
+                    base_url = coalesce(%s, base_url),
+                    region = coalesce(%s, region),
+                    notes = coalesce(%s, notes),
+                    updated_at = now()
+                where id = %s
+                returning id, app_id, organization_id, project_id, name, environment_type, status, base_url, region, notes, created_at, updated_at
+                """,
+                (
+                    body.status.value,
+                    body.base_url,
+                    body.region,
+                    body.notes,
+                    environment_id,
+                ),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise NotFoundError("Client environment not found.")
+            return ClientEnvironmentRecord(**row)
+
+    def get_client_environment(self, environment_id: UUID) -> ClientEnvironmentRecord:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                select id, app_id, organization_id, project_id, name, environment_type, status, base_url, region, notes, created_at, updated_at
+                from client_environments
+                where id = %s
+                """,
+                (environment_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise NotFoundError("Client environment not found.")
+            return ClientEnvironmentRecord(**row)
+
+    def upsert_metering_policy(
+        self,
+        organization_id: UUID,
+        body: MeteringPolicyUpsert,
+    ) -> MeteringPolicyRecord:
+        with get_db_cursor() as cur:
+            cur.execute("select id from organizations where id = %s", (organization_id,))
+            if cur.fetchone() is None:
+                raise NotFoundError("Organization not found.")
+            cur.execute(
+                """
+                insert into metering_policies(
+                    organization_id, base_fee_cents, usage_cap, overage_behavior, is_enforced, notes
+                ) values(%s, %s, %s, %s, %s, %s)
+                on conflict (organization_id) do update set
+                    base_fee_cents = excluded.base_fee_cents,
+                    usage_cap = excluded.usage_cap,
+                    overage_behavior = excluded.overage_behavior,
+                    is_enforced = excluded.is_enforced,
+                    notes = excluded.notes,
+                    updated_at = now()
+                returning organization_id, base_fee_cents, usage_cap, overage_behavior, is_enforced, notes, created_at, updated_at
+                """,
+                (
+                    organization_id,
+                    body.base_fee_cents,
+                    body.usage_cap,
+                    body.overage_behavior.value,
+                    body.is_enforced,
+                    body.notes,
+                ),
+            )
+            row = cur.fetchone()
+            return MeteringPolicyRecord(**row)
+
+    def get_metering_policy(self, organization_id: UUID) -> MeteringPolicyRecord:
+        with get_db_cursor() as cur:
+            cur.execute("select id from organizations where id = %s", (organization_id,))
+            if cur.fetchone() is None:
+                raise NotFoundError("Organization not found.")
+            cur.execute(
+                """
+                select organization_id, base_fee_cents, usage_cap, overage_behavior, is_enforced, notes, created_at, updated_at
+                from metering_policies
+                where organization_id = %s
+                """,
+                (organization_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise NotFoundError("Metering policy not found.")
+            return MeteringPolicyRecord(**row)
 
     def get_project(self, project_id: UUID) -> Project:
         with get_db_cursor() as cur:

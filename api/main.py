@@ -13,13 +13,16 @@ from api.observability import MetricsStore
 from api.routes.approval_decisions import router as approval_decisions_router
 from api.routes.admin import router as admin_router
 from api.routes.apps import router as apps_router
+from api.routes.client_environments import router as client_environments_router
 from api.routes.client_portal import router as client_portal_router
 from api.routes.demo import router as demo_router
 from api.routes.founder_console import router as founder_console_router
 from api.routes.intake_requests import router as intake_requests_router
+from api.routes.metering_controls import router as metering_controls_router
 from api.routes.orgs import router as orgs_router
 from api.routes.preview_builds import router as preview_builds_router
 from api.routes.projects import router as projects_router
+from api.routes.releases import router as releases_router
 from api.routes.workflow import router as workflow_router
 from api.security import (
     api_auth_configured,
@@ -60,12 +63,15 @@ http_log = structlog.get_logger("api.http")
 app.include_router(orgs_router, prefix="/v1", tags=["orgs"])
 app.include_router(projects_router, prefix="/v1", tags=["projects"])
 app.include_router(apps_router, prefix="/v1", tags=["apps"])
+app.include_router(client_environments_router, prefix="/v1", tags=["client_environments"])
 app.include_router(workflow_router, prefix="/v1", tags=["workflow"])
 app.include_router(demo_router, prefix="/v1", tags=["demo"])
 app.include_router(intake_requests_router, prefix="/v1", tags=["intake_requests"])
 app.include_router(preview_builds_router, prefix="/v1", tags=["preview_builds"])
 app.include_router(approval_decisions_router, prefix="/v1", tags=["approval_decisions"])
+app.include_router(releases_router, prefix="/v1", tags=["releases"])
 app.include_router(admin_router, prefix="/v1", tags=["admin"])
+app.include_router(metering_controls_router, prefix="/v1", tags=["metering_controls"])
 app.include_router(client_portal_router, tags=["client_portal"])
 app.include_router(founder_console_router, tags=["founder_console"])
 
@@ -238,6 +244,11 @@ async def request_validation_error_handler(_request: Request, _exc: RequestValid
 
 @app.get("/health")
 async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/")
+async def root_health() -> dict[str, str]:
     return {"status": "ok"}
 
 

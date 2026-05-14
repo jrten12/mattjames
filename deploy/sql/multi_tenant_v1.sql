@@ -49,6 +49,35 @@ create table if not exists apps (
 
 create index if not exists idx_apps_project on apps(project_id);
 
+create table if not exists client_environments (
+  id uuid primary key,
+  app_id uuid not null references apps(id) on delete cascade,
+  organization_id uuid not null references organizations(id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  name text not null,
+  environment_type text not null check (environment_type in ('preview','staging','production')),
+  status text not null check (status in ('provisioning','active','paused','failed','retired')),
+  base_url text,
+  region text,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_client_environments_app on client_environments(app_id, created_at);
+create index if not exists idx_client_environments_org on client_environments(organization_id, created_at);
+
+create table if not exists metering_policies (
+  organization_id uuid primary key references organizations(id) on delete cascade,
+  base_fee_cents integer not null check (base_fee_cents >= 0),
+  usage_cap bigint not null check (usage_cap >= 0),
+  overage_behavior text not null check (overage_behavior in ('allow','throttle','pause')),
+  is_enforced boolean not null default true,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists intake_requests (
   id uuid primary key,
   organization_id uuid not null references organizations(id) on delete cascade,
@@ -98,6 +127,25 @@ create table if not exists approval_decisions (
 );
 
 create index if not exists idx_approval_decisions_intake on approval_decisions(intake_request_id, created_at);
+
+create table if not exists release_records (
+  id uuid primary key,
+  intake_request_id uuid not null references intake_requests(id) on delete cascade,
+  preview_build_id uuid not null references preview_builds(id) on delete cascade,
+  organization_id uuid not null references organizations(id) on delete cascade,
+  project_id uuid references projects(id) on delete set null,
+  build_version text not null,
+  status text not null check (status in ('pending','staged','approved','deployed','failed','rolled_back')),
+  release_url text,
+  rollback_reason text,
+  notes text,
+  initiated_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_release_records_intake on release_records(intake_request_id, created_at);
+create index if not exists idx_release_records_org on release_records(organization_id, created_at);
 
 create table if not exists workflow_events (
   id uuid primary key,

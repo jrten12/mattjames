@@ -9,6 +9,10 @@ Phase 1 implementation of the core platform foundation:
 - Idempotent writes using `Idempotency-Key` header
 - PostgreSQL schema baseline in `deploy/sql/multi_tenant_v1.sql`
 
+## Frozen v1 operating flow
+
+- Canonical v1 operating flow documentation: `V1_OPERATING_FLOW.md`
+
 ## Quick start
 
 1. Copy env file:
@@ -82,6 +86,44 @@ Use this only for demos/sandbox setup.
 - `POST /v1/admin/projects/{project_id}/pause`
 - `POST /v1/admin/projects/{project_id}/resume`
 - `POST /v1/admin/apps/{app_id}/status`
+
+## Release orchestration endpoints (v1)
+
+- `POST /v1/releases` creates a release record from an approved preview build
+- `GET /v1/releases?intake_request_id=...` lists release records for an intake request
+- `POST /v1/releases/{release_id}/status` advances release state (`pending`, `staged`, `approved`, `deployed`, `failed`, `rolled_back`)
+
+Release creation guardrails:
+
+- preview build must belong to the intake request
+- preview build must be in `ready` status
+- latest approval decision for the intake request must be `approve`
+
+## Client environment registry endpoints (v1)
+
+- `POST /v1/client-environments` creates an environment record for an app
+- `GET /v1/client-environments?app_id=...` lists environment records for that app
+- `POST /v1/client-environments/{environment_id}` updates environment status/details
+
+Environment supports:
+
+- type: `preview`, `staging`, `production`
+- status lifecycle: `provisioning`, `active`, `paused`, `failed`, `retired`
+
+## Metering policy controls (founder-only)
+
+- `POST /v1/admin/metering/{organization_id}` upserts org metering policy
+- `GET /v1/admin/metering/{organization_id}` reads org metering policy
+
+Policy fields:
+
+- `base_fee_cents`
+- `usage_cap`
+- `overage_behavior` (`allow`, `throttle`, `pause`)
+- `is_enforced`
+- `notes`
+
+These controls are restricted to internal/founder access (tenant clients cannot write them).
 
 ## Observability and readiness
 
