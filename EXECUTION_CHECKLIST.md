@@ -22,3 +22,7 @@ Use this as the single source of truth for execution order.
 
 - Mark each step complete only after both backend behavior and UI behavior are validated.
 - Keep clients out of backend controls; clients only use Intake + Preview + Approval flows.
+
+## Phase 2 — powered customer container
+
+North star for org-scoped apps, docking, usage, and billing: see `PLATFORM_NATIVE_CONTAINER_ARCHITECTURE.md`.
